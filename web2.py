@@ -1,9 +1,10 @@
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException
-import json, operator,sys,time
+import json, operator,sys,time,requests
 
 categories = ["Consumer Electronics", "Jewelry", "Watches", "Health & Beauty"]
+#categories = ["Consumer Electronics"]
 driver = webdriver.Firefox()
 product = {}
 
@@ -33,8 +34,8 @@ def login():
 
 
 def execute():
-    prod_limit = 100
-    sub_cat_limit = 5
+    prod_limit = 10
+    sub_cat_limit = 10
     count=-1
     for cat in categories:
         count += 1
@@ -74,9 +75,9 @@ def execute():
         #print len(sub_link)
         c = 0
         prod_link_dict = {}
-        prod_link = []
         sub_count = 0
         for link in sub_link:
+            prod_link = []
             sub_count += 1
             c += 1
             if( c>sub_cat_limit):
@@ -84,29 +85,42 @@ def execute():
             driver.get(link)
             time.sleep(2)
             prod_elem = driver.find_elements_by_xpath("//a[@class=' product ' or @class='product ']")
+            ctr = 0
             for plink in prod_elem:
+                ctr += 1
+                if ctr>prod_limit:
+                    break
+                #print plink
                 temp = plink.get_attribute("href")
+                #print "   temp URL :: "
+                #print "                " + temp
                 if "http:" not in temp:
                     temp = "http:" + temp
                 prod_link.append(temp)
             prod_link_dict[categories[count]] = prod_link
-            ctr = 0
-            prod = {}
             size = prod_limit
             update_value = size*1.0/100
             divider = int(update_value+1)
             timer = 0
+            #print prod_link
             for prod1 in prod_link:
+                prod = {}
                 if timer % int(divider) == 0:
                     #print "s : " + str(size) + " uv : " + str(update_value) + " t/uv : " + str(int(timer/update_value)) + " :: " + str(count)
                     num = int(timer/(update_value*4*sub_cat_limit)) + 25*(sub_count-1)/sub_cat_limit +25*count
                     #print "a : " + str(int(timer/(update_value*4*sub_cat_limit))) + " b : " + str(25*(sub_count-1)/sub_cat_limit) + " c : " + str(25*count)
                     update_progress_bar(num)
-                ctr += 1
-                if ctr>prod_limit:
-                    break
+                #print "   getting url ::"
+                #print prod1
                 driver.get(prod1)
                 time.sleep(2)
+                if "http://sec.aliexpress.com/query.htm" in driver.current_url:
+                    time.sleep(10)
+                    print "inside captcha"
+                    driver.get(prod1)
+                    time.sleep(2)
+
+                
                 product_name = driver.find_element_by_xpath("//h1[@class='product-name']")
                 if product_name is not None:
                     product_name = product_name.text
@@ -163,6 +177,7 @@ def execute():
                     feedbacks = driver.find_elements_by_xpath("//div[@class='feedback-item clearfix']")
                 feedback = []
                 #print feedbacks
+                feedback_text = ""
                 for fb in feedbacks:
                     feed = {}
                     try:
@@ -186,14 +201,26 @@ def execute():
                     feed['user_name'] = user_name
                     feed['comment'] = comment
                     feed['time'] = times
+                    feedback_text += "\n\n" + comment
                     feedback.append(feed)
-
+                #print feedback_text.encode('utf-8')
                 #print "  description   :: " + str(desc)
                 #print "  prodduct name :: " + str(product_name)
                 #print "  category      :: " + str(cat)
                 #print "  rating        :: " + str(rating)
                 #print "  price         :: " + str(price)
                 #print "  image         :: " + str(image)
+                with open("feedback.txt", "w+") as feedback_file:
+                    feedback_file.write(feedback_text.encode('utf-8'))
+                data = {"apikey":"fe224304a5e5ff8ed263551e6138a1eeb0ec8b4d",
+                        "outputMode":"json",
+                        "text":feedback_text.encode('utf-8'),
+                        }
+                r =  requests.post("https://gateway-a.watsonplatform.net/calls/text/TextGetTextSentiment",
+                                   data=data)
+                json_text = json.loads(r.text)
+                if "docSentiment" in json_text:
+                    prod['sentiment_analysis'] = json_text["docSentiment"]   
                 prod['product_name'] = product_name
                 prod['category'] = cat
                 prod['image'] = image
@@ -202,11 +229,12 @@ def execute():
                 prod['description'] = desc
                 prod['link'] = prod1
                 prod['reviews'] = feedback
-
+                #print "           prod detail"
                 if categories[count] not in product:
                     product[categories[count]] = [prod]
                 else:
                     product[categories[count]].append(prod)
+                #print product[categories[count]]
                 timer += 1
     update_progress_bar(100)
 
@@ -222,6 +250,7 @@ def update_progress_bar(num):
     sys.stdout.flush()
 
 
+import traceback
 if __name__ == "__main__":
     
     update_progress_bar(0)
@@ -230,6 +259,8 @@ if __name__ == "__main__":
         execute()
     except:
         close()
+        traceback.print_exc()
+        pass
     for dicts in product:
         product[dicts] = sorted(product[dicts], key=operator.itemgetter('price'), reverse=True)    
     result = json.dumps(product)
@@ -237,6 +268,6 @@ if __name__ == "__main__":
         json_file.write(result)
 
     print ' Done!'
-    print result
+    #print result
 
 
