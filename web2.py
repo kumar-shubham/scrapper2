@@ -5,13 +5,13 @@ import json, operator,sys,time,requests
 
 categories = ["Consumer Electronics", "Jewelry", "Watches", "Health & Beauty"]
 #categories = ["Consumer Electronics"]
-driver = webdriver.Firefox()
+chromedriver = 'chromedriver'
+driver = webdriver.Chrome(chromedriver)
 product = {}
 
 
 def login():
     driver.get("https://login.aliexpress.com/buyer.htm")
-
     elem = driver.find_element_by_xpath("//a[contains(@href, 'http://thirdparty.aliexpress.com/login.htm?type=gg&tracelog=ws_gg_mainlogin')]")
     elem.click()
 
@@ -252,7 +252,7 @@ def update_progress_bar(num):
 
 import traceback
 if __name__ == "__main__":
-    
+
     update_progress_bar(0)
     login()
     try:
